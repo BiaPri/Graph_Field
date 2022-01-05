@@ -2,4 +2,5 @@
 
 First Play: 
 - Shopping Chart (E-commerce): https://www.kaggle.com/ruchi798/shopping-cart-database/data/
-![This is an image](https://github.com/BiaPri/Graph_Field/tree/master/images/E_commerce_Graph.png| width=100)
+
+<img src="https://github.com/BiaPri/Graph_Field/blob/master/images/E_commerce_Graph.png?raw=true" width="500" height="500" />
