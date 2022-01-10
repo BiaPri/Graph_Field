@@ -92,7 +92,7 @@ CALL gds.graph.create('e-Commerce', ['Customer', 'Product'],
                            }
                        );
 
-// Creating graph projection using Cypher --> To complete
+// Creating graph projection using Cypher --> To complete --> Graph by gender (!)
 CALL gds.graph.create.cypher('e-Commerce-Plus',
                              'MATCH (c:Customer)
                               MATCH (p:Product)
