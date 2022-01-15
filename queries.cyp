@@ -114,29 +114,16 @@ LIMIT 5;
 // Creating graph projection of Customers and Products
 CALL gds.graph.create('e-Commerce', ['Customer', 'ProductName'],
 					  {
-                        ORDERS: {
+                        BOUGHT: {
                                   type: 'BOUGHT',
                                   orientation: 'NATURAL'
                                  }
                            }
                        );
 
-// Creating graph projection using Cypher --> To complete --> Graph by gender (!)
-CALL gds.graph.create.cypher('e-Commerce-Plus',
-                             'MATCH (c:Customer)
-                              MATCH (p:Product)
-                              RETURN id(c), id(p)',
-                             'MATCH (c:Customer)-[r:ORDERS]->(p:Product)
-                              WITH c AS customer, r AS rel_order, p AS product, sum(r.quantity) AS quantity
-                              WHERE quantity >= 5
-                              RETURN id(customer) AS source, id(product) AS target, type(rel_order) AS type'
-                            )
-
-// Dropping graph
-CALL gds.graph.drop('e-Commerce')
 
 // Node Similarity Stream
-CALL gds.nodeSimilarity.stream('e-Commerce', {similarityCutoff: 0.1})
+CALL gds.nodeSimilarity.stream('e-Commerce', {similarityCutoff: 0.5})
 YIELD node1, node2, similarity
 RETURN gds.util.asNode(node1).name AS Customer1,
        gds.util.asNode(node2).name AS Customer2,
@@ -149,14 +136,13 @@ CALL gds.nodeSimilarity.write('e-Commerce',
     {
         writeRelationshipType: 'SIMILAR', 
         writeProperty: 'score',
-        relationshipWeightProperty: 'quantity', 
-        similarityCutoff: 0.1
+        similarityCutoff: 0.5
     }
 )
 YIELD nodesCompared, relationshipsWritten
 
-// Graph projection of SIMILAR Customers
-CALL gds.graph.create('Similar Customers', 'Customer', 
+// Graph projection of Customers Segmentation
+CALL gds.graph.create('Customers', 'Customer', 
                         {
                             SIMILAR: {
                                     type: 'SIMILAR',
@@ -169,6 +155,22 @@ CALL gds.graph.create('Similar Customers', 'Customer',
 CALL gds.wcc.write('Similar Customers', { writeProperty: 'componentId' })
 YIELD nodePropertiesWritten, componentCount;
 
+
+// CLEAN UP DATABASE
+// Displaying
+MATCH (n)
+RETURN n LIMIT 10;
+
+// Delete ALL
+MATCH (n)
+DETACH DELETE n;
+
+// Dropping graph
+CALL gds.graph.drop('e-Commerce')
+
+
+
+// APPENDIX => ADDITIONAL RESSOURCES
 // Node embedding
 CALL gds.beta.node2vec.write('Graph_Name',
                                 {
@@ -179,14 +181,13 @@ CALL gds.beta.node2vec.write('Graph_Name',
                                 }
                            );
 
-
-// Split Relationship (alpha)
-
-
-// Displaying
-MATCH (n)
-RETURN n LIMIT 10;
-
-// Delete ALL
-MATCH (n)
-DETACH DELETE n;
+// Creating graph projection using Cypher --> To complete --> Graph by gender (!)
+CALL gds.graph.create.cypher('e-Commerce-Plus',
+                             'MATCH (c:Customer)
+                              MATCH (p:Product)
+                              RETURN id(c), id(p)',
+                             'MATCH (c:Customer)-[r:ORDERS]->(p:Product)
+                              WITH c AS customer, r AS rel_order, p AS product, sum(r.quantity) AS quantity
+                              WHERE quantity >= 5
+                              RETURN id(customer) AS source, id(product) AS target, type(rel_order) AS type'
+                            )
