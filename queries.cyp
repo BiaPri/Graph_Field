@@ -111,8 +111,20 @@ RETURN p.name AS product_name, count(c) AS num_customers
 ORDER BY num_customers DESC
 LIMIT 5;
 
+// Gender to is a string => not accepted by gds One Hot Encoding? 8 Unique Genders
+MATCH (c:Customer)
+RETURN collect(DISTINCT c.gender)
+
+MATCH (c:Customer)
+SET c.ohe_gender = gds.alpha.ml.oneHotEncoding(["Male", "Bigender", "Female", "Polygender","Agender", "Genderfluid", "Non-binary", "Genderqueer"], [c.gender])
+
+
 // Creating graph projection of Customers and Products
-CALL gds.graph.create('e-Commerce', ['Customer', 'ProductName'],
+CALL gds.graph.create('e-Commerce',
+                      {
+                          Customer: {label: 'Customer', properties: ['age', 'gender']},
+                          Product: {label: 'ProductName'}
+                      },
 					  {
                         BOUGHT: {
                                   type: 'BOUGHT',
@@ -120,7 +132,6 @@ CALL gds.graph.create('e-Commerce', ['Customer', 'ProductName'],
                                  }
                            }
                        );
-
 
 // Node Similarity Stream
 CALL gds.nodeSimilarity.stream('e-Commerce', {similarityCutoff: 0.5})
@@ -141,8 +152,8 @@ CALL gds.nodeSimilarity.write('e-Commerce',
 )
 YIELD nodesCompared, relationshipsWritten
 
-// Graph projection of Customers Segmentation
-CALL gds.graph.create('Customers', 'Customer', 
+// Graph projection of Customers 
+CALL gds.graph.create('Segmentation', 'Customer', 
                         {
                             SIMILAR: {
                                     type: 'SIMILAR',
@@ -151,8 +162,8 @@ CALL gds.graph.create('Customers', 'Customer',
                         }
                 )  
 
-// WCC Algo => Community detection
-CALL gds.wcc.write('Similar Customers', { writeProperty: 'componentId' })
+// Louvain => Community detection
+CALL gds.louvain.stream('Similar Customers', { writeProperty: 'componentId' })
 YIELD nodePropertiesWritten, componentCount;
 
 
@@ -166,7 +177,8 @@ MATCH (n)
 DETACH DELETE n;
 
 // Dropping graph
-CALL gds.graph.drop('e-Commerce')
+CALL gds.graph.drop('e-Commerce');
+CALL gds.graph.drop('Segmentation');
 
 
 
