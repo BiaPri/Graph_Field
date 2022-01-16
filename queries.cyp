@@ -4,6 +4,8 @@ CREATE CONSTRAINT ON (p:Product) ASSERT p.id IS UNIQUE;
 CREATE CONSTRAINT ON (c:City) ASSERT c.name IS UNIQUE;
 CREATE CONSTRAINT ON (ps:ProductName) ASSERT ps.name IS UNIQUE;
 
+// Show Schema 
+CALL db.schema.visualization()
 
 // Customer Dataset to Customer, City and State Node 
 :auto USING PERIODIC COMMIT 100
@@ -93,48 +95,61 @@ WHERE bought_product >= 5
 RETURN customer, bought_product
 ORDER BY bought_product DESC;
 
+// Customers that did not order any product
+MATCH (c:Customer)
+WHERE NOT (c)-[:ORDERS]-(:Product)
+RETURN count(c)
+
 
 // NEW GRAPH 
-// Reduce Complexity of the graph Product Simple (Can Add color or size ++ quantity analysis)
-MATCH (p1:Product)<-[:ORDERS]-(c:Customer)-[:ORDERS]->(p2:Product)
-WHERE p1.name = p2.name  
-MERGE (pn:ProductName {name:p1.name})
-MERGE (c)-[:BOUGHT]->(pn)
+// Reduce Complexity => Can Add color or size ++ quantity analysis
+MATCH (c:Customer)-[r:ORDERS]->(p:Product)
+WITH c, p, sum(r.quantity) AS quantity
+MERGE (pn:ProductName {name: p.name})
+MERGE (c)-[:BOUGHT {quantity: quantity}]->(pn)
 
 // Sanity Check (Unique ProductName = 35)
 MATCH (p:ProductName)
 RETURN count(p.name) AS unique_names
 
-// TOP 5 Best Selling ProductName
+// Sanity Check (Remaining Unique Customers = 616)
 MATCH (c:Customer)-[:BOUGHT]->(p:ProductName)
-RETURN p.name AS product_name, count(c) AS num_customers
-ORDER BY num_customers DESC
+RETURN count(DISTINCT c.name) AS num_customers
+
+MATCH (c:Customer)-[:BOUGHT]->(p:ProductName)
+DETACH DELETE c, p;
+
+// TOP 5 Best Selling ProductName
+MATCH (c:Customer)-[b:BOUGHT]->(p:ProductName)
+RETURN p.name AS product_name, sum(b.quantity) AS bought_product
+ORDER BY bought_product DESC
 LIMIT 5;
 
+// PREPROCESSING
 // Gender to is a string => not accepted by gds One Hot Encoding? 8 Unique Genders
 MATCH (c:Customer)
-RETURN collect(DISTINCT c.gender)
-
+WITH collect(DISTINCT c.gender) AS genders
 MATCH (c:Customer)
-SET c.ohe_gender = gds.alpha.ml.oneHotEncoding(["Male", "Bigender", "Female", "Polygender","Agender", "Genderfluid", "Non-binary", "Genderqueer"], [c.gender])
+SET c.ohe_gender = gds.alpha.ml.oneHotEncoding(genders, [c.gender])
 
 
 // Creating graph projection of Customers and Products
 CALL gds.graph.create('e-Commerce',
                       {
-                          Customer: {label: 'Customer', properties: ['age', 'gender']},
+                          Customer: {label: 'Customer', properties: ['age', 'ohe_gender']},
                           Product: {label: 'ProductName'}
                       },
 					  {
                         BOUGHT: {
-                                  type: 'BOUGHT',
-                                  orientation: 'NATURAL'
-                                 }
+                                    type: 'BOUGHT',
+                                    orientation: 'NATURAL',
+                                    properties: 'quantity'
+                                }
                            }
                        );
 
 // Node Similarity Stream
-CALL gds.nodeSimilarity.stream('e-Commerce', {similarityCutoff: 0.5})
+CALL gds.nodeSimilarity.stream('e-Commerce', {similarityCutoff: 0.47})
 YIELD node1, node2, similarity
 RETURN gds.util.asNode(node1).name AS Customer1,
        gds.util.asNode(node2).name AS Customer2,
@@ -142,36 +157,58 @@ RETURN gds.util.asNode(node1).name AS Customer1,
 ORDER BY similarity DESC;
 
 
-// Node Similarity write (create relationship)
+// Node Similarity write (create relationship) [similarityCutoff ? 0.4 or 0.47]
 CALL gds.nodeSimilarity.write('e-Commerce', 
     {
         writeRelationshipType: 'SIMILAR', 
         writeProperty: 'score',
-        similarityCutoff: 0.5
+        similarityCutoff: 0.47
     }
 )
 YIELD nodesCompared, relationshipsWritten
 
 // Graph projection of Customers 
-CALL gds.graph.create('Segmentation', 'Customer', 
+CALL gds.graph.create('Segmentation',
+                        {
+                          Customer: {label: 'Customer', properties: ['age', 'ohe_gender']}
+                        },
                         {
                             SIMILAR: {
-                                    type: 'SIMILAR',
-                                    orientation: 'UNDIRECTED'
-                                    }
+                                        type: 'SIMILAR',
+                                        orientation: 'UNDIRECTED',
+                                        properties: 'score'
+                                     }
                         }
                 )  
 
-// Louvain => Community detection
-CALL gds.louvain.stream('Similar Customers', { writeProperty: 'componentId' })
+// Weakly connected components
+CALL gds.wcc.stream('Segmentation')
+YIELD nodeId, componentId
+WITH componentId, count(nodeId) AS num_customers
+RETURN componentId, num_customers
+ORDER BY num_customers DESC
+
+CALL gds.wcc.write('Segmentation', { writeProperty: 'wccId' })
+YIELD nodePropertiesWritten, componentCount;
+
+// Louvain => Community detection (Anonymous Graph)
+CALL gds.louvain.stream({
+                            {
+                                Customer: {label: 'Customer', properties: ['age', 'ohe_gender', 'wccId']}
+                            },
+                            {
+                                SIMILAR: {
+                                            type: 'SIMILAR',
+                                            orientation: 'UNDIRECTED',
+                                            properties: 'score'
+                                         }
+                            }
+                        },
+                        {relationshipWeightProperty: 'score', writeProperty: 'louvainId'})
 YIELD nodePropertiesWritten, componentCount;
 
 
 // CLEAN UP DATABASE
-// Displaying
-MATCH (n)
-RETURN n LIMIT 10;
-
 // Delete ALL
 MATCH (n)
 DETACH DELETE n;
