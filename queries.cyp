@@ -162,7 +162,7 @@ CALL gds.nodeSimilarity.write('e-Commerce',
     {
         writeRelationshipType: 'SIMILAR', 
         writeProperty: 'score',
-        similarityCutoff: 0.47
+        similarityCutoff: 0.4
     }
 )
 YIELD nodesCompared, relationshipsWritten
@@ -181,31 +181,47 @@ CALL gds.graph.create('Segmentation',
                         }
                 )  
 
-// Weakly connected components
-CALL gds.wcc.stream('Segmentation')
+// Weakly connected components (Anonymous Graph)
+CALL gds.wcc.stream(
+                        {
+                            nodeProjection: 'Customer',
+                            relationshipProjection: 'SIMILAR',
+                            nodeProperties: ['age', 'ohe_gender']
+                        }
+                    )
 YIELD nodeId, componentId
 WITH componentId, count(nodeId) AS num_customers
 RETURN componentId, num_customers
 ORDER BY num_customers DESC
 
-CALL gds.wcc.write('Segmentation', { writeProperty: 'wccId' })
+CALL gds.wcc.write('Segmentation', { writeProperty: 'wccId'})
 YIELD nodePropertiesWritten, componentCount;
 
-// Louvain => Community detection (Anonymous Graph)
-CALL gds.louvain.stream({
-                            {
-                                Customer: {label: 'Customer', properties: ['age', 'ohe_gender', 'wccId']}
-                            },
-                            {
-                                SIMILAR: {
-                                            type: 'SIMILAR',
-                                            orientation: 'UNDIRECTED',
-                                            properties: 'score'
-                                         }
-                            }
-                        },
+// Louvain => Community detection (Cypher Graph)
+CALL gds.graph.drop('Segmentation');
+
+CALL gds.graph.create.cypher(
+                             'Segmentation',
+                             'MATCH (c:Customer)
+                              WHERE c.wccId = 1
+                              RETURN id(c) AS id, c.age AS age, c.ohe_gender AS gender',
+                             'MATCH (c1)-[r:SIMILAR]->(c2)
+                              WHERE c1.wccId = 1 AND c2.wccId = 1 
+                              RETURN id(c1) AS source, id(c2) AS target, type(r) AS type, r.score AS score'
+                            ) 
+                        YIELD graphName AS graph, nodeCount AS nodes, relationshipCount AS rels
+
+// Intermediate Communities
+CALL gds.louvain.stream('Segmentation',
+                        {relationshipWeightProperty: 'score', includeIntermediateCommunities: true})
+YIELD  nodeId, communityId, intermediateCommunityIds;
+
+CALL gds.louvain.write('Segmentation',
                         {relationshipWeightProperty: 'score', writeProperty: 'louvainId'})
-YIELD nodePropertiesWritten, componentCount;
+YIELD communityCount, modularity, modularities
+
+// Coloring Communities
+
 
 
 // CLEAN UP DATABASE
