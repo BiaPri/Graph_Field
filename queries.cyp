@@ -1,3 +1,5 @@
+// To ZipCode, State, City + CSV and PERSONA IDENTIFICATION + age range
+
 // Constraints
 CREATE CONSTRAINT ON (c:Customer) ASSERT c.id IS UNIQUE;
 CREATE CONSTRAINT ON (p:Product) ASSERT p.id IS UNIQUE;
@@ -211,16 +213,17 @@ CALL gds.graph.create.cypher(
                             ) 
                         YIELD graphName AS graph, nodeCount AS nodes, relationshipCount AS rels
 
-// Intermediate Communities
 CALL gds.louvain.stream('Segmentation',
                         {relationshipWeightProperty: 'score', includeIntermediateCommunities: true})
 YIELD  nodeId, communityId, intermediateCommunityIds;
 
+// Coloring Communities [140, 566, 578, 440, 360, 394, 416, 432, 594, 494, 327, 396, 299, 251]
 CALL gds.louvain.write('Segmentation',
-                        {relationshipWeightProperty: 'score', writeProperty: 'louvainId'})
+                        {relationshipWeightProperty: 'score', includeIntermediateCommunities: false, writeProperty: 'community'})
 YIELD communityCount, modularity, modularities
 
-// Coloring Communities
+
+// Export to csv use python driver (py2neo)
 
 
 
