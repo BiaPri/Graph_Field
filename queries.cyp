@@ -1,4 +1,5 @@
-// To ZipCode, State, City + CSV and PERSONA IDENTIFICATION + age range
+
+//                                                              *** DATABASE INPUT ***
 
 // Constraints
 CREATE CONSTRAINT ON (c:Customer) ASSERT c.id IS UNIQUE;
@@ -60,6 +61,8 @@ RETURN count(*) AS num_procucts
 MATCH (c:Customer)
 RETURN count(*) AS num_customers
 
+
+//                                                              *** ANALYTICS ***
 // Finding Customers living in the South Australia
 MATCH (c:Customer)
 WHERE c.state = 'South Australia'
@@ -122,13 +125,11 @@ MATCH (p:Product)
 WHERE NOT (p)-[:ORDERS]-(:Customer)
 RETURN count(p) AS are_not_ordered
 
-
 // APOC Testing
 MATCH (c:Customer)-[r:ORDERS]->(p:Product)
 RETURN apoc.agg.statistics(c.age) AS age_distribution,  
        apoc.agg.statistics(p.price) AS price_distribution,
        apoc.agg.statistics(r.quantity) AS quantity_order_distribution;
-
 
 // TOP 5 Best Selling Product 
 MATCH (c:Customer)-[r:ORDERS]->(p:Product)
@@ -215,14 +216,13 @@ CALL{
         ORDER BY num_sales DESC
         LIMIT 3
    }
-WITH top_buyer, collect(product) AS products
-RETURN top_buyer, products;
+WITH best_order_date, top_buyer, collect(product) AS products
+RETURN best_order_date, top_buyer, products;
 
 
 
 
-
-// **** NEW GRAPH **** 
+//                                                              **** DATA SCIENCE **** 
 // Reduce Complexity => Can Add color or size
 MATCH (c:Customer)-[r:ORDERS]->(p:Product)
 WITH c, p, sum(r.quantity) AS quantity
@@ -237,29 +237,35 @@ RETURN count(p.name) AS unique_names
 MATCH (c:Customer)-[:BOUGHT]->(p:ProductName)
 RETURN count(DISTINCT c.name) AS num_customers
 
-// TOP 5 Best Selling ProductName
-MATCH (c:Customer)-[b:BOUGHT]->(p:ProductName)
-RETURN p.name AS product_name, sum(b.quantity) AS bought_product
-ORDER BY bought_product DESC
-LIMIT 5;
+
 
 // PREPROCESSING
-// Gender to is a string => not accepted by gds One Hot Encoding? 8 Unique Genders
+// Gender is a string => One Hot Encoding 8 Unique Genders
 MATCH (c:Customer)
 WITH collect(DISTINCT c.gender) AS genders
 MATCH (c:Customer)
 SET c.ohe_gender = gds.alpha.ml.oneHotEncoding(genders, [c.gender])
 
-// State One Hot Encoding 8 Unique States
+// State is a string => One Hot Encoding 8 Unique States
+MATCH (c:Customer)
+WITH collect(DISTINCT c.state) AS states
+MATCH (c:Customer)
+SET c.ohe_state = gds.alpha.ml.oneHotEncoding(states, [c.state])
 
-
-// Age Bins => Categorical
-
+// Age Bins => Categorical 
+MATCH (c:Customer)
+SET c.age_cat = (CASE 
+                    WHEN c.age>= 20 AND c.age<= 30 THEN 1
+                    WHEN c.age> 30 AND c.age<= 50 THEN 2
+                    WHEN c.age> 50 AND c.age<= 70 THEN 3
+                    ELSE 4
+                    END 
+                )
 
 // Creating graph projection of Customers and Products
 CALL gds.graph.create('e-Commerce',
                       {
-                          Customer: {label: 'Customer', properties: ['age', 'ohe_gender']},
+                          Customer: {label: 'Customer', properties: ['age_cat', 'ohe_gender', 'ohe_state']},
                           Product: {label: 'ProductName'}
                       },
 					  {
@@ -272,7 +278,7 @@ CALL gds.graph.create('e-Commerce',
                        );
 
 // Node Similarity Stream
-CALL gds.nodeSimilarity.stream('e-Commerce', {similarityCutoff: 0.47})
+CALL gds.nodeSimilarity.stream('e-Commerce', {similarityCutoff: 0.1})
 YIELD node1, node2, similarity
 RETURN gds.util.asNode(node1).name AS Customer1,
        gds.util.asNode(node2).name AS Customer2,
@@ -280,20 +286,24 @@ RETURN gds.util.asNode(node1).name AS Customer1,
 ORDER BY similarity DESC;
 
 
-// Node Similarity write (create relationship) [similarityCutoff ? 0.4 or 0.47]
+// Node Similarity write (create relationship) [similarityCutoff ? 0.4 or 0.42 or 0.47]
 CALL gds.nodeSimilarity.write('e-Commerce', 
     {
         writeRelationshipType: 'SIMILAR', 
         writeProperty: 'score',
-        similarityCutoff: 0.4
+        similarityCutoff: 0.42
     }
 )
 YIELD nodesCompared, relationshipsWritten
 
+// DELETE Similarity Graph 
+MATCH (:Customer)-[s:SIMILAR]->(:Customer)
+DELETE s;
+
 // Graph projection of Customers 
 CALL gds.graph.create('Segmentation',
                         {
-                          Customer: {label: 'Customer', properties: ['age', 'ohe_gender']}
+                          Customer: {label: 'Customer', properties: ['age_cat', 'ohe_gender', 'ohe_state']}
                         },
                         {
                             SIMILAR: {
@@ -309,7 +319,7 @@ CALL gds.wcc.stream(
                         {
                             nodeProjection: 'Customer',
                             relationshipProjection: 'SIMILAR',
-                            nodeProperties: ['age', 'ohe_gender']
+                            nodeProperties: ['age_cat', 'ohe_gender', 'ohe_state']
                         }
                     )
 YIELD nodeId, componentId
@@ -320,31 +330,43 @@ ORDER BY num_customers DESC
 CALL gds.wcc.write('Segmentation', { writeProperty: 'wccId'})
 YIELD nodePropertiesWritten, componentCount;
 
+// Triangle Count 
+CALL gds.triangleCount.write('Segmentation', {
+                            writeProperty: 'triangles'})
+YIELD globalTriangleCount, nodeCount
+
+// Local Clustering Coefficient
+CALL gds.localClusteringCoefficient.write('Segmentation', {
+                                           writeProperty: 'localClusteringCoefficient'})
+YIELD averageClusteringCoefficient, nodeCount
+
 // Louvain => Community detection (Cypher Graph)
 CALL gds.graph.drop('Segmentation');
 
 CALL gds.graph.create.cypher(
                              'Segmentation',
                              'MATCH (c:Customer)
-                              WHERE c.wccId = 1
-                              RETURN id(c) AS id, c.age AS age, c.ohe_gender AS gender',
+                              WHERE c.wccId = 0
+                              RETURN id(c) AS id, c.age_cat AS age, c.ohe_gender AS gender, c.ohe_state AS state',
                              'MATCH (c1)-[r:SIMILAR]->(c2)
-                              WHERE c1.wccId = 1 AND c2.wccId = 1 
+                              WHERE c1.wccId = 0 AND c2.wccId = 0 
                               RETURN id(c1) AS source, id(c2) AS target, type(r) AS type, r.score AS score'
                             ) 
                         YIELD graphName AS graph, nodeCount AS nodes, relationshipCount AS rels
 
+// Louvain
 CALL gds.louvain.stream('Segmentation',
                         {relationshipWeightProperty: 'score', includeIntermediateCommunities: true})
 YIELD  nodeId, communityId, intermediateCommunityIds;
 
-// Coloring Communities
+
 CALL gds.louvain.write('Segmentation',
-                        {relationshipWeightProperty: 'score', includeIntermediateCommunities: false, writeProperty: 'community'})
+                        {relationshipWeightProperty: 'score', includeIntermediateCommunities: false, writeProperty: 'louvain_community'})
 YIELD communityCount, modularity, modularities
 
 
 // Export to csv use python driver (py2neo) --> Persona + ML?
+
 
 
 // CLEAN UP DATABASE
