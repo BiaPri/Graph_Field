@@ -191,7 +191,32 @@ CALL{
 WITH top_buyer, collect(product) AS products
 RETURN top_buyer, products;
 
-// Best Selling Date TOP Buyer TOP Product
+// Best Selling Date TOP Buyer TOP 3 Product
+CALL{
+        MATCH (c:Customer)-[r:ORDERS]->(p:Product)
+        WITH r.order_date AS best_order_date, sum(r.quantity*p.price) AS money
+        RETURN best_order_date
+        ORDER BY money DESC
+        LIMIT 1
+    }
+CALL{
+        WITH best_order_date
+        MATCH (c:Customer)-[r:ORDERS {order_date:best_order_date}]->(p:Product)
+        WITH c.name as top_buyer, sum(r.quantity*p.price) as spend
+        RETURN top_buyer
+        ORDER BY spend DESC
+        LIMIT 1
+    }
+CALL{
+        WITH top_buyer
+        MATCH (c:Customer{name:top_buyer})-[r:ORDERS]->(p:Product)
+        WITH p.name AS product, sum(r.quantity) AS num_sales
+        RETURN product
+        ORDER BY num_sales DESC
+        LIMIT 3
+   }
+WITH top_buyer, collect(product) AS products
+RETURN top_buyer, products;
 
 
 
