@@ -115,7 +115,7 @@ ORDER BY bought_products DESC;
 // Customers that did not order any product
 MATCH (c:Customer)
 WHERE NOT (c)-[:ORDERS]-(:Product)
-RETURN count(c) AS do_not_order
+RETURN count(c) AS did_not_order
 
 // Product not ordered by anyone 
 MATCH (p:Product)
@@ -152,8 +152,25 @@ ORDER BY num_sales DESC
 LIMIT 5;
 
 // Best Selling Date
-MATCH (c:)
+MATCH (c:Customer)-[r:ORDERS]->(p:Product)
+WITH r.order_date AS order_date, sum(r.quantity*p.price) AS money
+RETURN apoc.agg.statistics(money) AS revenue_per_order_date
 
+MATCH (c:Customer)-[r:ORDERS]->(p:Product)
+WITH r.order_date AS order_date, sum(r.quantity*p.price) AS money
+RETURN order_date, money
+ORDER BY money DESC
+LIMIT 1
+
+// Mean time to deliver
+MATCH (c:Customer)-[r:ORDERS]->(p:Product)
+WITH duration.between(r.order_date, r.delivery_date).days AS delivery_time
+RETURN apoc.agg.statistics(delivery_time) AS delivery_time_distribution
+
+MATCH (c:Customer)-[r:ORDERS]->(p:Product)
+WITH duration.between(r.order_date, r.delivery_date).days AS delivery_time
+WITH round(avg(delivery_time),2) AS avg_delivery_time_days
+RETURN avg_delivery_time_days
 
 // TOP Buyer TOP 3 Products (COMPLEX)
 CALL{
@@ -163,7 +180,6 @@ CALL{
         ORDER BY spend DESC
         LIMIT 1
     }
-WITH top_buyer
 CALL{
         WITH top_buyer
         MATCH (c:Customer{name:top_buyer})-[r:ORDERS]->(p:Product)
@@ -173,20 +189,16 @@ CALL{
         LIMIT 3
    }
 WITH top_buyer, collect(product) AS products
-RETURN top_buyer, products
+RETURN top_buyer, products;
+
+// Best Selling Date TOP Buyer TOP Product
 
 
 
-RETURN top_buyer
-
-ORDER BY spend DESC
-LIMIT 1;
-
-// Best Selling Date TOP Buyer TOP 2 Products
 
 
-// NEW GRAPH 
-// Reduce Complexity => Can Add color or size ++ quantity analysis
+// **** NEW GRAPH **** 
+// Reduce Complexity => Can Add color or size
 MATCH (c:Customer)-[r:ORDERS]->(p:Product)
 WITH c, p, sum(r.quantity) AS quantity
 MERGE (pn:ProductName {name: p.name})
@@ -212,6 +224,11 @@ MATCH (c:Customer)
 WITH collect(DISTINCT c.gender) AS genders
 MATCH (c:Customer)
 SET c.ohe_gender = gds.alpha.ml.oneHotEncoding(genders, [c.gender])
+
+// State One Hot Encoding 8 Unique States
+
+
+// Age Bins => Categorical
 
 
 // Creating graph projection of Customers and Products
@@ -296,7 +313,7 @@ CALL gds.louvain.stream('Segmentation',
                         {relationshipWeightProperty: 'score', includeIntermediateCommunities: true})
 YIELD  nodeId, communityId, intermediateCommunityIds;
 
-// Coloring Communities [140, 566, 578, 440, 360, 394, 416, 432, 594, 494, 327, 396, 299, 251]
+// Coloring Communities
 CALL gds.louvain.write('Segmentation',
                         {relationshipWeightProperty: 'score', includeIntermediateCommunities: false, writeProperty: 'community'})
 YIELD communityCount, modularity, modularities
@@ -326,14 +343,3 @@ CALL gds.beta.node2vec.write('Graph_Name',
                                     writeProperty: "embeddingNode2vec"
                                 }
                            );
-
-// Creating graph projection using Cypher --> To complete --> Graph by gender (!)
-CALL gds.graph.create.cypher('e-Commerce-Plus',
-                             'MATCH (c:Customer)
-                              MATCH (p:Product)
-                              RETURN id(c), id(p)',
-                             'MATCH (c:Customer)-[r:ORDERS]->(p:Product)
-                              WITH c AS customer, r AS rel_order, p AS product, sum(r.quantity) AS quantity
-                              WHERE quantity >= 5
-                              RETURN id(customer) AS source, id(product) AS target, type(rel_order) AS type'
-                            )
