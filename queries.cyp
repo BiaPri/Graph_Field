@@ -3,45 +3,36 @@
 // Constraints
 CREATE CONSTRAINT ON (c:Customer) ASSERT c.id IS UNIQUE;
 CREATE CONSTRAINT ON (p:Product) ASSERT p.id IS UNIQUE;
-CREATE CONSTRAINT ON (c:City) ASSERT c.name IS UNIQUE;
 CREATE CONSTRAINT ON (ps:ProductName) ASSERT ps.name IS UNIQUE;
 
 // Show Schema 
 CALL db.schema.visualization()
 
-// Customer Dataset to Customer, City and State Node 
+// Customer Dataset to Customer
 :auto USING PERIODIC COMMIT 100
 LOAD CSV WITH HEADERS FROM 'https://raw.githubusercontent.com/BiaPri/Graph_Field/master/data_e_commerce/customers.csv' AS row
-MERGE (c:Customer {id: toInteger(row.customer_id), name: row.customer_name, gender: row.gender, age: toInteger(row.age)})
-MERGE (ct:City {name: row.city})
-MERGE (s:State {name: row.state})
-MERGE (c)-[:LIVING_CITY]->(ct)
-MERGE (c)-[:LIVING_STATE]->(s)
+MERGE (c:Customer {id: toInteger(row.customer_id), name: row.customer_name, gender: row.gender, age: toInteger(row.age), state: row.state})
 
 // Faster using APOC (select right batchSize)
 CALL apoc.periodic.iterate(
 "CALL apoc.load.csv('https://raw.githubusercontent.com/BiaPri/Graph_Field/master/data_e_commerce/customers.csv')
  YIELD map AS row RETURN row",
-"MERGE (c:Customer {id: toInteger(row.customer_id), name: row.customer_name, gender: row.gender, age: toInteger(row.age)})
- MERGE (ct:City {name: row.city})
- MERGE (s:State {name: row.state})
- MERGE (c)-[:LIVING_CITY]->(ct)
- MERGE (c)-[:LIVING_STATE]->(s)",
- {batchSize: 150}
+"MERGE (c:Customer {id: toInteger(row.customer_id), name: row.customer_name, gender: row.gender, age: toInteger(row.age), state: row.state})",
+ {batchSize: 200}
 )
 
 // Product Datset to Product node
 :auto USING PERIODIC COMMIT 100
 LOAD CSV WITH HEADERS FROM 'https://raw.githubusercontent.com/BiaPri/Graph_Field/master/data_e_commerce/products.csv' AS row
 MERGE (:Product {id: toInteger(row.product_ID), type: row.product_type, name: row.product_name, 
-                 size: row.size, color: row.colour, price: toInteger(row.price), stock: toInteger(row.quantity)})
+                 size: row.size, color: row.colour, price: toInteger(row.price)})
 
 // Faster using APOC (select right batchSize)
 CALL apoc.periodic.iterate(
 "CALL apoc.load.csv('https://raw.githubusercontent.com/BiaPri/Graph_Field/master/data_e_commerce/products.csv')
  YIELD map AS row RETURN row",
 "MERGE (:Product {id: toInteger(row.product_ID), type: row.product_type, name: row.product_name, 
-                 size: row.size, color: row.colour, price: toInteger(row.price), stock: toInteger(row.quantity)})",
+                 size: row.size, color: row.colour, price: toInteger(row.price)})",
  {batchSize: 200}
 )
 
@@ -69,39 +60,81 @@ RETURN count(*) AS num_procucts
 MATCH (c:Customer)
 RETURN count(*) AS num_customers
 
-// Sanity Check Cities = 961
-MATCH (c:City)
-RETURN count(*) AS num_cities
-
 // Finding Customers living in the South Australia
-MATCH (c:Customer)-[:LIVING_STATE]->(s:State)
-WHERE s.name = 'South Australia'
-RETURN count(*) AS num_customers;
+MATCH (c:Customer)
+WHERE c.state = 'South Australia'
+RETURN c.state AS state, count(*) AS num_customers;
 
 // Finding Customers living in two states
 UNWIND ['South Australia', 'Queensland'] AS st
-MATCH (:Customer)-[:LIVING_STATE]->(s:State)
+MATCH (:Customer)
 WHERE s.name = st
 RETURN s.name AS state, count(*) AS num_customers;
 
-// Counting number of Customers living in the same city
-MATCH (c:Customer)-[:LIVING_CITY]->(ct:City)
-WITH ct.name AS city, count(c.name) AS num_customers
-RETURN city, num_customers 
+MATCH (c:Customer)
+WHERE c.state IN ['South Australia', 'Queensland']
+RETURN c.state AS state, count(*) AS num_customers;
+
+// Finding #Customer living in different states
+MATCH (c:Customer)
+RETURN c.state AS state, count(*) AS num_customers
 ORDER BY num_customers DESC;
+
+// Gender Distribution
+MATCH (c:Customer)
+RETURN c.gender AS gender, count(*) AS num_customers
+ORDER BY num_customers DESC;
+
+// Product Name Distribution
+MATCH (p:Product)
+RETURN p.name AS product_name, count(*) AS num_products
+ORDER BY num_products DESC;
+
+// Number of order per customers
+MATCH (c:Customer)-[r:ORDERS]->(:Product)
+RETURN c.name AS customer_name, count(r) AS orders
+ORDER BY orders DESC;
+
+// Number of quantity ordered per customers
+MATCH (c:Customer)-[r:ORDERS]->(:Product)
+RETURN c.name AS customer_name, sum(r.quantity) AS quantity
+ORDER BY orders DESC;
+
+MATCH (c:Customer)-[r:ORDERS]->(p:Product)
+RETURN c.name AS customer_name, sum(p.price*r.quantity) AS total_price, sum(r.quantity) AS quantity, count(r) AS orders 
+ORDER BY total_price DESC
+LIMIT 5;
 
 // Customers that bought more than "n" products
 MATCH (c:Customer)-[r:ORDERS]->(p:Product)
-WITH c.name AS customer, sum(r.quantity) AS bought_product
-WHERE bought_product >= 5
-RETURN customer, bought_product
-ORDER BY bought_product DESC;
+WITH c.name AS customer, sum(r.quantity) AS bought_products
+WHERE bought_products >= 5
+RETURN customer, bought_products
+ORDER BY bought_products DESC;
 
 // Customers that did not order any product
 MATCH (c:Customer)
 WHERE NOT (c)-[:ORDERS]-(:Product)
-RETURN count(c)
+RETURN count(c) AS do_not_order
 
+// Product not ordered by anyone 
+MATCH (p:Product)
+WHERE NOT (p)-[:ORDERS]-(:Customer)
+RETURN count(p) AS are_not_ordered
+
+// APOC Testing
+MATCH (c:Customer)-[r:ORDERS]->(p:Product)
+RETURN apoc.agg.statistics(c.age) AS age_distribution,  
+       apoc.agg.statistics(p.price) AS price_distribution,
+       apoc.agg.statistics(r.quantity) AS quantity_order_distribution;
+
+// Best Selling Product 
+MATCH (c:Customer)-[r:ORDERS]->(p:Product)
+RETURN p, count(*) AS num_sales
+ORDER BY num_sales DESC
+LIMIT 1;
+
+// Best Selling Date
 
 // NEW GRAPH 
 // Reduce Complexity => Can Add color or size ++ quantity analysis
@@ -223,8 +256,7 @@ CALL gds.louvain.write('Segmentation',
 YIELD communityCount, modularity, modularities
 
 
-// Export to csv use python driver (py2neo)
-
+// Export to csv use python driver (py2neo) --> Persona + ML?
 
 
 // CLEAN UP DATABASE
