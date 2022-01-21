@@ -101,7 +101,7 @@ RETURN c.name AS customer_name, sum(r.quantity) AS quantity
 ORDER BY orders DESC;
 
 MATCH (c:Customer)-[r:ORDERS]->(p:Product)
-RETURN c.name AS customer_name, sum(p.price*r.quantity) AS total_price, sum(r.quantity) AS quantity, count(r) AS orders 
+RETURN c.name AS customer_name, sum(p.price*r.quantity) AS spend, sum(r.quantity) AS quantity, count(r) AS orders 
 ORDER BY total_price DESC
 LIMIT 5;
 
@@ -122,19 +122,68 @@ MATCH (p:Product)
 WHERE NOT (p)-[:ORDERS]-(:Customer)
 RETURN count(p) AS are_not_ordered
 
+
 // APOC Testing
 MATCH (c:Customer)-[r:ORDERS]->(p:Product)
 RETURN apoc.agg.statistics(c.age) AS age_distribution,  
        apoc.agg.statistics(p.price) AS price_distribution,
        apoc.agg.statistics(r.quantity) AS quantity_order_distribution;
 
-// Best Selling Product 
+
+// TOP 5 Best Selling Product 
 MATCH (c:Customer)-[r:ORDERS]->(p:Product)
-RETURN p, count(*) AS num_sales
+RETURN p, sum(r.quantity) AS num_sales
 ORDER BY num_sales DESC
-LIMIT 1;
+LIMIT 5;
+
+MATCH (c:Customer)-[r:ORDERS]->(p:Product)
+RETURN p.name, sum(r.quantity) AS num_sales
+ORDER BY num_sales DESC
+LIMIT 5;
+
+MATCH (c:Customer)-[r:ORDERS]->(p:Product)
+RETURN p.color, sum(r.quantity) AS num_sales
+ORDER BY num_sales DESC
+LIMIT 5;
+
+MATCH (c:Customer)-[r:ORDERS]->(p:Product)
+RETURN p.size, sum(r.quantity) AS num_sales
+ORDER BY num_sales DESC
+LIMIT 5;
 
 // Best Selling Date
+MATCH (c:)
+
+
+// TOP Buyer TOP 3 Products (COMPLEX)
+CALL{
+        MATCH (c:Customer)-[r:ORDERS]->(p:Product)
+        WITH c.name as top_buyer, sum(r.quantity*p.price) as spend
+        RETURN top_buyer
+        ORDER BY spend DESC
+        LIMIT 1
+    }
+WITH top_buyer
+CALL{
+        WITH top_buyer
+        MATCH (c:Customer{name:top_buyer})-[r:ORDERS]->(p:Product)
+        WITH p.name AS product, sum(r.quantity) AS num_sales
+        RETURN product
+        ORDER BY num_sales DESC
+        LIMIT 3
+   }
+WITH top_buyer, collect(product) AS products
+RETURN top_buyer, products
+
+
+
+RETURN top_buyer
+
+ORDER BY spend DESC
+LIMIT 1;
+
+// Best Selling Date TOP Buyer TOP 2 Products
+
 
 // NEW GRAPH 
 // Reduce Complexity => Can Add color or size ++ quantity analysis
@@ -150,9 +199,6 @@ RETURN count(p.name) AS unique_names
 // Sanity Check (Remaining Unique Customers = 616)
 MATCH (c:Customer)-[:BOUGHT]->(p:ProductName)
 RETURN count(DISTINCT c.name) AS num_customers
-
-MATCH (c:Customer)-[:BOUGHT]->(p:ProductName)
-DETACH DELETE c, p;
 
 // TOP 5 Best Selling ProductName
 MATCH (c:Customer)-[b:BOUGHT]->(p:ProductName)
