@@ -19,7 +19,7 @@ CALL apoc.periodic.iterate(
 "CALL apoc.load.csv('https://raw.githubusercontent.com/BiaPri/Graph_Field/master/data_e_commerce/customers.csv')
  YIELD map AS row RETURN row",
 "MERGE (c:Customer {id: toInteger(row.customer_id), name: row.customer_name, gender: row.gender, age: toInteger(row.age), state: row.state})",
- {batchSize: 200}
+ {batchSize: 100}
 )
 
 // Product Datset to Product node
@@ -34,7 +34,7 @@ CALL apoc.periodic.iterate(
  YIELD map AS row RETURN row",
 "MERGE (:Product {id: toInteger(row.product_ID), type: row.product_type, name: row.product_name, 
                  size: row.size, color: row.colour, price: toInteger(row.price)})",
- {batchSize: 200}
+ {batchSize: 150}
 )
 
 // Creating Relationship between Customer and Product Node
