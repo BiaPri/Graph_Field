@@ -50,7 +50,7 @@ CALL apoc.periodic.iterate(
 "MATCH (c:Customer {id: toInteger(row.customer_id)}) 
  MATCH (p:Product {id: toInteger(row.product_id)})
  MERGE (c)-[:ORDERS {order_date: date(row.order_date), delivery_date: date(row.delivery_date), quantity: toInteger(row.quantity)}]->(p)",
- {batchSize: 500}
+ {batchSize: 250}
 )
 
 // Sanity Check Products = 1260
@@ -416,8 +416,6 @@ CALL gds.louvain.write('Segmentation',
                         {relationshipWeightProperty: 'score', includeIntermediateCommunities: false, writeProperty: 'community'})
 YIELD communityCount, modularity, modularities
 
-// Statistic per Communities --> Personas (If possible)
-
 
 
 // CLEAN UP DATABASE
@@ -441,3 +439,9 @@ CALL gds.beta.node2vec.write('Graph_Name',
                                     writeProperty: "embeddingNode2vec"
                                 }
                            );
+
+// MinMax Scaling order_frequency
+MATCH (c:Customer)-[:ORDERS]->(:Product)
+WITH avg(c.order_frequency) AS average_frequency, stDev(c.order_frequency) AS std_frequency
+MATCH (c:Customer)-[:ORDERS]->(:Product)
+SET c.min_max_frequency = toFloat((c.order_frequency-average_frequency))/std_frequency;
