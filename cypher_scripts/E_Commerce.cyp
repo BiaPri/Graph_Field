@@ -11,12 +11,12 @@ CALL db.schema.visualization()
 
 // Customer Dataset to Customer
 :auto USING PERIODIC COMMIT 100
-LOAD CSV WITH HEADERS FROM 'https://raw.githubusercontent.com/BiaPri/Graph_Field/master/data_e_commerce/customers.csv' AS row
+LOAD CSV WITH HEADERS FROM 'https://raw.githubusercontent.com/BiaPri/Graph_Field/master/data/e_Commerce/customers.csv' AS row
 MERGE (c:Customer {id: toInteger(row.customer_id), name: row.customer_name, gender: row.gender, age: toInteger(row.age), state: row.state})
 
 // Faster using APOC (select right batchSize)
 CALL apoc.periodic.iterate(
-"CALL apoc.load.csv('https://raw.githubusercontent.com/BiaPri/Graph_Field/master/data_e_commerce/customers.csv')
+"CALL apoc.load.csv('https://raw.githubusercontent.com/BiaPri/Graph_Field/master/data/e_Commerce/customers.csv')
  YIELD map AS row RETURN row",
 "MERGE (c:Customer {id: toInteger(row.customer_id), name: row.customer_name, gender: row.gender, age: toInteger(row.age), state: row.state})",
  {batchSize: 100}
@@ -24,13 +24,13 @@ CALL apoc.periodic.iterate(
 
 // Product Datset to Product node
 :auto USING PERIODIC COMMIT 100
-LOAD CSV WITH HEADERS FROM 'https://raw.githubusercontent.com/BiaPri/Graph_Field/master/data_e_commerce/products.csv' AS row
+LOAD CSV WITH HEADERS FROM 'https://raw.githubusercontent.com/BiaPri/Graph_Field/master/data/e_Commerce/products.csv' AS row
 MERGE (:Product {id: toInteger(row.product_ID), type: row.product_type, name: row.product_name, 
                  size: row.size, color: row.colour, price: toInteger(row.price)})
 
 // Faster using APOC (select right batchSize)
 CALL apoc.periodic.iterate(
-"CALL apoc.load.csv('https://raw.githubusercontent.com/BiaPri/Graph_Field/master/data_e_commerce/products.csv')
+"CALL apoc.load.csv('https://raw.githubusercontent.com/BiaPri/Graph_Field/master/data/e_Commerce/products.csv')
  YIELD map AS row RETURN row",
 "MERGE (:Product {id: toInteger(row.product_ID), type: row.product_type, name: row.product_name, 
                  size: row.size, color: row.colour, price: toInteger(row.price)})",
@@ -38,14 +38,14 @@ CALL apoc.periodic.iterate(
 )
 
 // Creating Relationship between Customer and Product Node
-LOAD CSV WITH HEADERS FROM 'https://raw.githubusercontent.com/BiaPri/Graph_Field/master/data_e_commerce/orders_sales.csv' AS row
+LOAD CSV WITH HEADERS FROM 'https://raw.githubusercontent.com/BiaPri/Graph_Field/master/data/e_Commerce/orders_sales.csv' AS row
 MATCH (c:Customer {id: toInteger(row.customer_id)}) 
 MATCH (p:Product {id: toInteger(row.product_id)})
 MERGE (c)-[:ORDERS {order_date: date(row.order_date), delivery_date: date(row.delivery_date), quantity: toInteger(row.quantity)}]->(p)
 
 // Faster using APOC (select right batchSize)
 CALL apoc.periodic.iterate(
-"CALL apoc.load.csv('https://raw.githubusercontent.com/BiaPri/Graph_Field/master/data_e_commerce/orders_sales.csv')
+"CALL apoc.load.csv('https://raw.githubusercontent.com/BiaPri/Graph_Field/master/data/e_Commerce/orders_sales.csv')
  YIELD map AS row RETURN row",
 "MATCH (c:Customer {id: toInteger(row.customer_id)}) 
  MATCH (p:Product {id: toInteger(row.product_id)})
