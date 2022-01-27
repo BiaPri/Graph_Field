@@ -9,4 +9,4 @@
 **Second Play**:
 - Indian Railways: https://www.kaggle.com/sripaadsrinivasan/indian-railways-dataset
 
-<img src="https://github.com/BiaPri/Graph_Field/blob/master/images/Indian_Railway.png?raw=true" width="980" height="150" />
+<img src="https://github.com/BiaPri/Graph_Field/blob/master/images/Indian_Railway.png?raw=true" width="954" height="191" />
