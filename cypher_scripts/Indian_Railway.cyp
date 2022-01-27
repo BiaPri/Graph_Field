@@ -26,7 +26,7 @@ UNWIND value.features as train
 RETURN train",
 "CREATE (t:Train {name: train.properties.name, from_station_code: train.properties.from_station_code,
                    to_station_code: train.properties.to_station_code, number: train.properties.number})",
-{batchSize: 100});
+{batchSize: 300});
 
 
 // Stations Connections (TO)
