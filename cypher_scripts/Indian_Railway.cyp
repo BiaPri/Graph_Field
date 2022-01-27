@@ -29,11 +29,16 @@ RETURN train",
 {batchSize: 100});
 
 
-// Connections FROM & TO
+// Stations Connections (TO)
 MATCH (t:Train)
 MATCH (s1:Station {code: t.from_station_code}), (s2:Station {code: t.to_station_code})
-MERGE (s1)<-[:FROM]-(t)-[:TO]->(s2)
+MERGE (s1)-[:TO]->(s2)
 
+// Degree Centrality
+CALL gds.graph.create('Stations_Net', 'Station'
+                      {
+                        'TO': {orientation: 'UNDIRECTED'}
+                      })
 
 
 // Upload STOPS (Find another way) Too many nodes for Aura DB
@@ -42,13 +47,17 @@ CALL apoc.periodic.iterate(
 YIELD value
 UNWIND value as stop
 RETURN stop",
-"CREATE (s:Stop {id: stop.id, train_number: stop.train_number, station_code: stop.station_code, 
-                 departure: stop.departure})",
+"
+WHERE stop.departure <> 'None'
+CREATE (s:Stop {id: stop.id, train_number: stop.train_number, station_code: stop.station_code, 
+                 departure: time(stop.departure)})",
 {batchSize: 600});
 
-MATCH (st1: Stops), (st2: Stops)
+MATCH (st1: Stop), (st2: Stop)
 WHERE st1.train_number = st2.train_number AND time(st1.departure) > time(st2.departure)
 MERGE (st1)-[:NEXT]->(st2)
+
+
 
 
 
