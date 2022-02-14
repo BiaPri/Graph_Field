@@ -20,7 +20,7 @@
 **Fifth Play**:
 - Rio de Janeiro Bus System: https://www.kaggle.com/elioenaigomes/rio-de-janeiro-bus-system
 
-**Sixth Play **:
+**Sixth Play**:
 - Twitter Edge Nodes: https://www.kaggle.com/mathurinache/twitter-edge-nodes
 
 **Seventh Play**:
