@@ -12,7 +12,7 @@ Shopping Chart (E-commerce): https://www.kaggle.com/ruchi798/shopping-cart-datab
 <h3> :keyboard: Second Play </h3>
 Facebook Pages Network (Large): https://www.kaggle.com/yamqwe/facebook-pages-network-large
 
-<br><img src="https://github.com/BiaPri/Graph_Field/blob/master/images/Facebook.png?raw=true" width="807" height="116" /></img></br>
+<br><img src="https://github.com/BiaPri/Graph_Field/blob/master/images/Facebook.PNG?raw=true" width="500" height="150" /></img></br>
 <br>
 <h3> :passenger_ship: Third Play </h3>
 2019 Nigerian Import Data: https://www.kaggle.com/godwinabah/2019-nigerian-import-data
