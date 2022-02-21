@@ -34,3 +34,25 @@ SET p:Politician;
 MATCH (p:Page)
 REMOVE p.page_type;
 
+// EDA
+MATCH (p:Company)-[:CONNECTED]->(:Company)
+WITH COUNT(*) AS connections, p
+RETURN p.page_name AS name, connections 
+ORDER BY connections DESC
+LIMIT 5;
+
+MATCH (p:Company)-[:CONNECTED]->(:Page)
+WITH COUNT(*) AS connections, p
+RETURN p.page_name AS name, connections 
+ORDER BY connections DESC
+LIMIT 5;
+
+// Shortest Path
+MATCH path=shortestPath((:Company {page_name:'Facebook'})-[*0..10]-(:Page {page_name:'KLM Royal Dutch Airlines'}))
+RETURN min(path)
+
+MATCH path=shortestPath((:Company {page_name:'Facebook'})<-[*0..10]-(:Government {page_name:'U.S. Army Aviation and Missile Command'}))
+RETURN min(path)
+
+
+//Centrality, Betweness, Community Detection
